@@ -541,6 +541,16 @@ class StockBalanceReport:
 						"width": 110,
 					}
 				)
+		if self.filters.get("show_serial_batch_wise") and self.filters.get("group_by") == "Batch":
+			columns.append(
+				{
+					"label": _("Batch No"),
+					"fieldname": "batch_no",
+					"fieldtype": "Link",
+					"options": "Batch",
+					"width": 100,
+				}
+			)
 
 		columns.extend(
 			[
@@ -636,17 +646,6 @@ class StockBalanceReport:
 				{"label": att_name, "fieldname": att_name, "width": 100}
 				for att_name in get_variants_attributes()
 			]
-		
-		if self.filters.get("show_serial_batch_wise") and self.filters.get("group_by") == "Batch":
-			columns.append(
-				{
-					"label": _("Batch No"),
-					"fieldname": "batch_no",
-					"fieldtype": "Link",
-					"options": "Batch",
-					"width": 100,
-				}
-			)
 
 		return columns
 
