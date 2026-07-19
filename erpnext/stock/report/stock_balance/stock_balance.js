@@ -144,6 +144,37 @@ frappe.query_reports["Stock Balance"] = {
 			fieldtype: "Check",
 			default: 0,
 		},
+		{
+			fieldname: "show_serial_batch_wise",
+			label: __("Show Serial / Batch Wise Stock"),
+			fieldtype: "Check",
+			default: 0,
+		},
+		{
+			fieldname: "group_by",
+			on_change: function() {
+				let group_by = frappe.query_report.get_filter_value("group_by");
+				if (group_by == "Serial") {
+					frappe.msgprint(
+						__(
+							"Serial Wise coming soon. Showing Batch Wise data."
+						)
+					)
+				}
+			},
+			label: __("Group By"),
+			fieldtype: "Select",
+			options: "Batch\nSerial",
+			default: "Batch",
+			depends_on: "eval:doc.show_serial_batch_wise",
+		},
+		{
+			fieldname: "batch_no",
+			label: __("Batch No"),
+			fieldtype: "Link",
+			options: "Batch",
+			depends_on: "eval:doc.show_serial_batch_wise",
+		},
 	],
 
 	formatter: function (value, row, column, data, default_formatter) {

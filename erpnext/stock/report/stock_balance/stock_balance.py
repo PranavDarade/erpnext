@@ -22,6 +22,7 @@ from erpnext.stock.report.stock_ageing.stock_ageing import (
 	normalize_fifo_queue,
 )
 from erpnext.stock.utils import add_additional_uom_columns
+from erpnext.stock.report.stock_ledger.stock_ledger import get_serial_batch_bundle_details
 
 
 class StockBalanceFilter(TypedDict):
@@ -110,6 +111,9 @@ class StockBalanceReport:
 			)
 
 	def get_entries_from_stock_closing_balance(self) -> list:
+		if self.filters.get("show_serial_batch_wise"):
+			return []
+		
 		stk_cl_obj = StockClosing(self.filters.company, self.from_date, self.from_date)
 		if not stk_cl_obj.last_closing_balance:
 			return []
@@ -194,7 +198,7 @@ class StockBalanceReport:
 	def prepare_item_warehouse_map_for_current_period(self):
 		self.opening_vouchers = self.get_opening_vouchers()
 
-		if self.filters.get("show_stock_ageing_data"):
+		if self.filters.get("show_stock_ageing_data") or self.filters.get("show_serial_batch_wise"):
 			self.sle_entries = self.sle_query.run(as_dict=True)
 
 		self.prepare_stock_reco_voucher_wise_count()
@@ -202,8 +206,11 @@ class StockBalanceReport:
 		# HACK: This is required to avoid causing db query in flt
 		_system_settings = frappe.get_cached_doc("System Settings")
 		with frappe.db.unbuffered_cursor():
-			if not self.filters.get("show_stock_ageing_data"):
+			if not self.filters.get("show_stock_ageing_data") and not self.filters.get("show_serial_batch_wise"):
 				self.sle_entries = self.sle_query.run(as_dict=True, as_iterator=True)
+
+			if self.filters.get("show_serial_batch_wise"):
+				self.sle_entries = self.expand_sle_entries(self.sle_entries)
 
 			for entry in self.sle_entries:
 				group_by_key = self.get_group_by_key(entry)
@@ -215,6 +222,27 @@ class StockBalanceReport:
 		self.item_warehouse_map = filter_items_with_no_transactions(
 			self.item_warehouse_map, self.float_precision, self.inventory_dimensions
 		)
+
+	def expand_sle_entries(self, sle_list):
+		bundle_map = get_serial_batch_bundle_details(sle_list, self.filters)
+		expanded = []
+
+		for sle in sle_list:
+			if sle.serial_and_batch_bundle:
+				children  = bundle_map.get(sle.serial_and_batch_bundle) or []
+				for child in children:
+					new_row = frappe._dict(sle)
+					new_row.batch_no = child.batch_no
+					new_row.actual_qty = child.qty
+					new_row.stock_value_difference = child.stock_value_difference
+					new_row.valuation_rate = child.incoming_rate
+					expanded.append(new_row)
+			elif sle.batch_no:
+				expanded.append(sle)
+			else:
+				expanded.append(sle)
+		
+		return expanded
 
 	def prepare_stock_reco_voucher_wise_count(self):
 		self.stock_reco_voucher_wise_count = frappe._dict()
@@ -319,6 +347,12 @@ class StockBalanceReport:
 				{"reserved_stock": sre_details.get((report_data.item_code, report_data.warehouse), 0.0)}
 			)
 
+			if self.filters.get("show_serial_batch_wise"):
+				if report_data.bal_qty:
+					report_data.val_rate = report_data.bal_val / report_data.bal_qty
+				else:
+					report_data.val_rate = 0
+
 			if (
 				not self.filters.get("include_zero_stock_items")
 				and report_data
@@ -402,6 +436,7 @@ class StockBalanceReport:
 				"bal_qty": 0.0,
 				"bal_val": 0.0,
 				"val_rate": 0.0,
+				"batch_no": entry.get("batch_no"),
 			}
 		)
 
@@ -414,6 +449,9 @@ class StockBalanceReport:
 
 			if self.filters.get(fieldname) or self.filters.get("show_dimension_wise_stock"):
 				group_by_key.append(row.get(fieldname))
+
+		if self.filters.get("show_serial_batch_wise") and self.filters.get("group_by") == "Batch":
+			group_by_key.append(row.get("batch_no"))
 
 		return tuple(group_by_key)
 
@@ -598,6 +636,17 @@ class StockBalanceReport:
 				{"label": att_name, "fieldname": att_name, "width": 100}
 				for att_name in get_variants_attributes()
 			]
+		
+		if self.filters.get("show_serial_batch_wise") and self.filters.get("group_by") == "Batch":
+			columns.append(
+				{
+					"label": _("Batch No"),
+					"fieldname": "batch_no",
+					"fieldtype": "Link",
+					"options": "Batch",
+					"width": 100,
+				}
+			)
 
 		return columns
 
@@ -816,6 +865,7 @@ def filter_items_with_no_transactions(
 				"stock_uom",
 				"company",
 				"opening_fifo_queue",
+				"batch_no",
 			]:
 				continue
 
