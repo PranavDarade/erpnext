@@ -155,11 +155,17 @@ frappe.query_reports["Stock Balance"] = {
 			on_change: function() {
 				let group_by = frappe.query_report.get_filter_value("group_by");
 				if (group_by == "Serial") {
-					frappe.msgprint(
-						__(
-							"Serial Wise coming soon. Showing Batch Wise data."
+					if (
+						!frappe.query_report.get_filter_value("item_code") &&
+						!frappe.query_report.get_filter_value("warehouse") &&
+						!frappe.query_report.get_filter_value("serial_no")
+					) {
+						frappe.msgprint(
+							__(
+								"Please select an Item, Warehouse or Serial No to view Serial wise stock."
+							)
 						)
-					)
+					}
 				}
 			},
 			label: __("Group By"),
@@ -173,6 +179,13 @@ frappe.query_reports["Stock Balance"] = {
 			label: __("Batch No"),
 			fieldtype: "Link",
 			options: "Batch",
+			depends_on: "eval:doc.show_serial_batch_wise",
+		},
+		{
+			fieldname: "serial_no",
+			label: __("Serial No"),
+			fieldtype: "Link",
+			options: "Serial No",
 			depends_on: "eval:doc.show_serial_batch_wise",
 		},
 	],

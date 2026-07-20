@@ -241,6 +241,9 @@ def get_serial_batch_bundle_details(sl_entries, filters=None):
 	if filters.get("batch_no"):
 		query_filers["batch_no"] = filters.batch_no
 
+	if filters.get("serial_no"):
+		query_filers["serial_no"] = filters.serial_no
+
 	_bundle_details = frappe._dict({})
 	batch_entries = frappe.get_all(
 		"Serial and Batch Entry",

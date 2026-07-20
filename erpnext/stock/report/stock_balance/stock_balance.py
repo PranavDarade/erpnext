@@ -23,6 +23,7 @@ from erpnext.stock.report.stock_ageing.stock_ageing import (
 )
 from erpnext.stock.utils import add_additional_uom_columns
 from erpnext.stock.report.stock_ledger.stock_ledger import get_serial_batch_bundle_details
+from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 
 
 class StockBalanceFilter(TypedDict):
@@ -66,6 +67,21 @@ class StockBalanceReport:
 
 	def run(self):
 		self.float_precision = cint(frappe.db.get_default("float_precision")) or 3
+
+		if (
+			self.filters.get("show_serial_batch_wise") and
+			self.filters.get("group_by") == "Serial" and
+			not (
+				self.filters.get("item_code") or
+				self.filters.get("warehouse") or
+				self.filters.get("serial_no")
+			)
+		):
+			frappe.throw(
+				_(
+					"Please select an Item, Warehouse or Serial No to view Serial wise stock."
+				)
+			)
 
 		self.item_warehouse_map = frappe._dict({})
 		self.inventory_dimensions = self.get_inventory_dimension_fields()
@@ -193,6 +209,32 @@ class StockBalanceReport:
 		if self.filters.get("company"):
 			query = query.where(sle.company == self.filters.get("company"))
 
+		if self.filters.get("batch_no"):
+			sbe = frappe.qb.DocType("Serial and Batch Entry")
+			bundles_with_batch = (
+				frappe.qb.from_(sbe)
+				.select(sbe.parent)
+				.where(sbe.batch_no == self.filters.get("batch_no"))
+			)
+
+			query = query.where(
+				(sle.batch_no == self.filters.get("batch_no")) |
+				(sle.serial_and_batch_bundle.isin(bundles_with_batch))
+			)
+
+		if self.filters.get("serial_no"):
+			sbe = frappe.qb.DocType("Serial and Batch Entry")
+			bundles_with_serial = (
+				frappe.qb.from_(sbe)
+				.select(sbe.parent)
+				.where(sbe.serial_no == self.filters.get("serial_no"))
+			)
+
+			query = query.where(
+				(sle.serial_no.like(f"%{self.filters.serial_no}%")) |
+				(sle.serial_and_batch_bundle.isin(bundles_with_serial))
+			)
+
 		self.sle_query = query
 
 	def prepare_item_warehouse_map_for_current_period(self):
@@ -226,19 +268,36 @@ class StockBalanceReport:
 	def expand_sle_entries(self, sle_list):
 		bundle_map = get_serial_batch_bundle_details(sle_list, self.filters)
 		expanded = []
+		serial_mode = self.filters.get("group_by") == "Serial"
 
 		for sle in sle_list:
 			if sle.serial_and_batch_bundle:
-				children  = bundle_map.get(sle.serial_and_batch_bundle) or []
-				for child in children:
+				children = bundle_map.get(sle.serial_and_batch_bundle) or []
+				for child in children: 
 					new_row = frappe._dict(sle)
-					new_row.batch_no = child.batch_no
+					if serial_mode and not child.serial_no:
+							continue
+
+					if serial_mode:
+						new_row.serial_no = child.serial_no
+					else: 
+						new_row.batch_no = child.batch_no
+					
 					new_row.actual_qty = child.qty
 					new_row.stock_value_difference = child.stock_value_difference
 					new_row.valuation_rate = child.incoming_rate
 					expanded.append(new_row)
-			elif sle.batch_no:
-				expanded.append(sle)
+						
+			elif serial_mode and sle.serial_no:
+				serials = get_serial_nos(sle.serial_no)
+				n = len(serials) or 1
+				for serial in serials: 
+					new_row = frappe._dict(sle)
+					new_row.serial_no = serial
+					new_row.actual_qty = sle.actual_qty / n
+					new_row.stock_value_difference = sle.stock_value_difference / n
+					expanded.append(new_row)
+			
 			else:
 				expanded.append(sle)
 		
@@ -437,6 +496,7 @@ class StockBalanceReport:
 				"bal_val": 0.0,
 				"val_rate": 0.0,
 				"batch_no": entry.get("batch_no"),
+				"serial_no": entry.get("serial_no"),
 			}
 		)
 
@@ -452,6 +512,8 @@ class StockBalanceReport:
 
 		if self.filters.get("show_serial_batch_wise") and self.filters.get("group_by") == "Batch":
 			group_by_key.append(row.get("batch_no"))
+		elif self.filters.get("show_serial_batch_wise") and self.filters.get("group_by") == "Serial":
+			group_by_key.append(row.get("serial_no"))
 
 		return tuple(group_by_key)
 
@@ -548,6 +610,17 @@ class StockBalanceReport:
 					"fieldname": "batch_no",
 					"fieldtype": "Link",
 					"options": "Batch",
+					"width": 100,
+				}
+			)
+		
+		if self.filters.get("show_serial_batch_wise") and self.filters.get("group_by") == "Serial":
+			columns.append(
+				{
+					"label": _("Serial No"),
+					"fieldname": "serial_no",
+					"fieldtype": "Link",
+					"options": "Serial",
 					"width": 100,
 				}
 			)
@@ -865,6 +938,7 @@ def filter_items_with_no_transactions(
 				"company",
 				"opening_fifo_queue",
 				"batch_no",
+				"serial_no",
 			]:
 				continue
 
