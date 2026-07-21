@@ -5,7 +5,7 @@
 import frappe
 from frappe import _, bold, throw
 from frappe.query_builder.functions import Sum
-from frappe.utils import cint, flt, get_link_to_form, nowtime
+from frappe.utils import cint, flt, get_link_to_form, nowtime, getdate, nowdate
 
 from erpnext.accounts.party import render_address
 from erpnext.controllers.accounts_controller import get_taxes_and_charges
@@ -58,6 +58,7 @@ class SellingController(StockController):
 			self.terms = frappe.get_value("Terms and Conditions", self.get("tc_name"), "terms")
 
 	def validate(self):
+		self.validate_customer_is_not_blocked()
 		super().validate()
 		self.validate_items()
 		if not (self.get("is_debit_note") or self.get("is_return")):
@@ -1140,6 +1141,36 @@ class SellingController(StockController):
 		pick_lists = {row.against_pick_list for row in self.items if row.against_pick_list}
 		for pick_list in pick_lists:
 			update_pick_list_status(pick_list)
+	
+	def validate_customer_is_not_blocked(self):
+		if self.doctype == "Quotation":
+			if self.quotation_to != "Customer":
+				return
+			customer_name = self.party_name
+		
+		else: 
+			customer_name = self.get("customer")
+
+		if not customer_name:
+			return
+
+		customer = frappe.get_cached_doc("Customer", customer_name)		
+		if not customer.block_customer:
+			return
+		
+		if customer.release_date and getdate(nowdate()) > getdate(customer.release_date):
+			return
+		
+		block_types = [row.transaction_type for row in customer.blocked_transactions]
+
+		if self.doctype in block_types:
+			frappe.throw(
+				_(
+					"{0} is blocked for {1} transaction"
+				)
+				.format(customer_name, self.doctype)
+			)
+
 
 
 def set_default_income_account_for_item(obj):

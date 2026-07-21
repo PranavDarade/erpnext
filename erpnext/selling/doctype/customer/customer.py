@@ -44,24 +44,22 @@ class Customer(TransactionBase):
 	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
-		from frappe.types import DF
-
-		from erpnext.accounts.doctype.allowed_to_transact_with.allowed_to_transact_with import (
-			AllowedToTransactWith,
-		)
+		from erpnext.accounts.doctype.allowed_to_transact_with.allowed_to_transact_with import AllowedToTransactWith
 		from erpnext.accounts.doctype.party_account.party_account import PartyAccount
+		from erpnext.selling.doctype.customer_block.customer_block import CustomerBlock
 		from erpnext.selling.doctype.customer_credit_limit.customer_credit_limit import CustomerCreditLimit
 		from erpnext.selling.doctype.sales_team.sales_team import SalesTeam
-		from erpnext.selling.doctype.supplier_number_at_customer.supplier_number_at_customer import (
-			SupplierNumberAtCustomer,
-		)
+		from erpnext.selling.doctype.supplier_number_at_customer.supplier_number_at_customer import SupplierNumberAtCustomer
 		from erpnext.stock.doctype.company_restriction.company_restriction import CompanyRestriction
 		from erpnext.utilities.doctype.portal_user.portal_user import PortalUser
+		from frappe.types import DF
 
 		account_manager: DF.Link | None
 		accounts: DF.Table[PartyAccount]
 		alias: DF.Data | None
 		allowed_companies: DF.TableMultiSelect[CompanyRestriction]
+		block_customer: DF.Check
+		blocked_transactions: DF.Table[CustomerBlock]
 		companies: DF.Table[AllowedToTransactWith]
 		credit_limits: DF.Table[CustomerCreditLimit]
 		customer_details: DF.Text | None
@@ -98,6 +96,7 @@ class Customer(TransactionBase):
 		portal_users: DF.Table[PortalUser]
 		primary_address: DF.TextEditor | None
 		prospect_name: DF.Link | None
+		release_date: DF.Date | None
 		represents_company: DF.Link | None
 		restrict_to_companies: DF.Check
 		sales_team: DF.Table[SalesTeam]
@@ -203,6 +202,11 @@ class Customer(TransactionBase):
 		if self.sales_team:
 			if sum(member.allocated_percentage or 0 for member in self.sales_team) != 100:
 				frappe.throw(_("Total contribution percentage should be equal to 100"))
+
+	def before_save(self):
+		if not self.block_customer:
+			self.release_date = ""
+			self.blocked_transactions = []
 
 	@frappe.whitelist(methods=["POST"])
 	def get_customer_group_details(self):

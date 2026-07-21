@@ -68,6 +68,10 @@
   "company_restrictions_section",
   "restrict_to_companies",
   "allowed_companies",
+  "block_customer_section",
+  "block_customer",
+  "blocked_transactions",
+  "release_date",
   "section_break_ario",
   "so_required",
   "dn_required",
@@ -523,18 +527,18 @@
   },
   {
    "default": "0",
+   "description": "If checked, this Customer is only available for transactions in the companies listed below.",
    "fieldname": "restrict_to_companies",
    "fieldtype": "Check",
-   "label": "Restrict to Companies",
-   "description": "If checked, this Customer is only available for transactions in the companies listed below."
+   "label": "Restrict to Companies"
   },
   {
+   "depends_on": "eval:doc.restrict_to_companies",
    "fieldname": "allowed_companies",
    "fieldtype": "Table MultiSelect",
    "label": "Allowed Companies",
-   "options": "Company Restriction",
-   "depends_on": "eval:doc.restrict_to_companies",
-   "mandatory_depends_on": "eval:doc.restrict_to_companies"
+   "mandatory_depends_on": "eval:doc.restrict_to_companies",
+   "options": "Company Restriction"
   },
   {
    "collapsible": 1,
@@ -711,6 +715,29 @@
   {
    "fieldname": "section_break_ario",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "block_customer_section",
+   "fieldtype": "Section Break",
+   "label": "Block Customer"
+  },
+  {
+   "default": "0",
+   "fieldname": "block_customer",
+   "fieldtype": "Check",
+   "label": "Block Customer"
+  },
+  {
+   "fieldname": "blocked_transactions",
+   "fieldtype": "Table",
+   "label": "Blocked Transactions",
+   "options": "Customer Block"
+  },
+  {
+   "description": "Leave blank if the Customer is blocked indefinitely",
+   "fieldname": "release_date",
+   "fieldtype": "Date",
+   "label": "Release Date"
   }
  ],
  "icon": "fa fa-user",
@@ -724,7 +751,7 @@
    "link_fieldname": "party"
   }
  ],
- "modified": "2026-07-14 23:00:00.000000",
+ "modified": "2026-07-21 17:40:34.746295",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Customer",
